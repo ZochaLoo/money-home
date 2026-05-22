@@ -1,16 +1,56 @@
-# React + Vite
+# 🏠 Money Home 记账
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个聊天式记账 Web App，输入自然语言自动归类，支持收入、支出、储蓄追踪
+一键点击固定消费，不需要每个月重复输入同一种消费，简单高效！
+iOS 和 Android 都能用，不是 APP 不用安装，不占手机内存，像在手机加 Shortcut 一样 🤩✨
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✨ 功能
 
-## React Compiler
+- 💬 **聊天式记账**：输入「午餐 12」自动归类为餐饮
+- 💰 **收入追踪**：薪水、副业、投资
+- 💸 **支出追踪**：21 个自定义分类
+- 🏦 **储蓄追踪**：银行、基金
+- 📌 **固定开销**：一键记录每月固定支出
+- 📊 **月度统计**：饼图可视化支出分布
+- ⚙️ **自定义**：分类、关键词、固定开销全部可增删改
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 🔗 在线使用
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+👉 **[https://ZochaLoo.github.io/money-home](https://ZochaLoo.github.io/money-home)**
+
+---
+
+## 📱 添加到手机主屏幕
+
+**iOS（Safari）**
+1. 用 Safari 打开网址
+2. 点右上角的 `⋯` 三个点菜单
+3. 选 **添加到主屏幕（Add to Home Screen）**
+4. 像 App 一样使用 ✅
+
+**Android（Chrome）**
+1. 用 Chrome 打开网址
+2. 点右上角的 `⋮` 三个点菜单
+3. 选 **添加到主屏幕（Add to Home Screen）** 或 **安装应用**
+4. 完成 ✅
+
+---
+
+## 🗣️ 记账语法
+
+| 输入 | 效果 |
+|------|------|
+| `午餐 12` | 💸 支出 → 餐饮 RM12 |
+| `薪水 8000` | 💰 收入 → 薪水 RM8000 |
+| `储蓄 ryt 2000` | 🏦 储蓄 → RYT Bank RM2000 |
+| `toll 1.5 tng` | 💸 支出 → 交通，付款方式 TNG |
+| `改` | ✏️ 修改上一条的分类 |
+| `删除` | 🗑️ 删除上一条记录 |
+
+---
+
+*数据存储在浏览器本地（localStorage），不上传任何服务器，完全私密。*
