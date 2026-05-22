@@ -51,9 +51,8 @@ const fDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}
 const fTime = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 const dayNames = ["日","一","二","三","四","五","六"];
 
-// Neon glow styles
 const glow = (color, intensity = 12) => `0 0 ${intensity}px ${color}40, 0 0 ${intensity * 2}px ${color}20`;
-const cardStyle = { background: "rgba(255,255,255,0.04)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)" };
+const cardStyle = { background: "rgba(255,255,255,0.04)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" };
 
 export default function App() {
   const [entries, setEntries] = useState([]);
@@ -258,7 +257,7 @@ export default function App() {
   const incCatList = Object.keys(incomeCats);
   const savCatList = Object.keys(savingsCats);
 
-  if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#08090d", color: "#fff", fontFamily: "'Noto Sans SC',sans-serif" }}><p>加载中...</p></div>;
+  if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100dvh", background: "#08090d", color: "#fff", fontFamily: "'Noto Sans SC',sans-serif" }}><p>加载中...</p></div>;
 
   const tabBtn = k => ({
     flex: 1, padding: "7px 0", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
@@ -275,7 +274,7 @@ export default function App() {
   const iS = { padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e0e0e0", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
 
   return (
-    <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg, #08090d 0%, #0d0e14 50%, #0a0b10 100%)", color: "#e0e0e0", fontFamily: "'Noto Sans SC','SF Pro Display',sans-serif", overflow: "hidden" }}>
+    <div style={{ maxWidth: 430, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg, #08090d 0%, #0d0e14 50%, #0a0b10 100%)", color: "#e0e0e0", fontFamily: "'Noto Sans SC','SF Pro Display',sans-serif", overflow: "hidden" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" />
 
       {/* Header */}
