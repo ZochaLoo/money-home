@@ -824,8 +824,8 @@ export default function App() {
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>➕ 添加固定开销</div>
               <input placeholder="名称" value={newFixed.name} onChange={e => setNewFixed(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", marginBottom: 6 }} />
               <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                <input placeholder="金额" type="number" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1 }} />
-                <select value={newFixed.category} onChange={e => setNewFixed(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, maxWidth: "50%" }}>
+                <input placeholder="金额" type="number" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0 }} />
+                <select value={newFixed.category} onChange={e => setNewFixed(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, maxWidth: "50%" }}>
                   <option value="">选分类</option>
                   {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
                 </select>
