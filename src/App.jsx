@@ -51,6 +51,7 @@ const fDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}
 const fTime = d => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 const dayNames = ["日","一","二","三","四","五","六"];
 
+// Neon glow styles
 const glow = (color, intensity = 12) => `0 0 ${intensity}px ${color}40, 0 0 ${intensity * 2}px ${color}20`;
 const cardStyle = { background: "rgba(255,255,255,0.04)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(10px)" };
 
@@ -241,6 +242,7 @@ export default function App() {
     return [expenseCats, setExpenseCats];
   }
 
+  // Computed
   const me = entries.filter(e => e.date.startsWith(selMonth));
   const incomeTotal = me.filter(e => e.type === "income").reduce((s, e) => s + e.amount, 0);
   const expenseTotal = me.filter(e => e.type === "expense").reduce((s, e) => s + e.amount, 0);
