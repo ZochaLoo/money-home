@@ -333,7 +333,7 @@ export default function App() {
 
       {/* FIXED */}
       {view === "fixed" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontSize: 14, color: "#666" }}>勾选要记录的</span>
             <button onClick={() => { const allOn = fixed.every((_, i) => fixedChecked[i]); const n = {}; if (!allOn) fixed.forEach((_, i) => { n[i] = true; }); setFixedChecked(n); }}
@@ -344,8 +344,8 @@ export default function App() {
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5, overflowY: "auto" }}>
             {fixed.map((f, i) => (
               <div key={i} onClick={() => setFixedChecked(p => ({ ...p, [i]: !p[i] }))} style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 12, cursor: "pointer",
-                ...cardStyle, background: fixedChecked[i] ? "rgba(255,138,0,0.08)" : "rgba(255,255,255,0.04)",
+                display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", borderRadius: 10, cursor: "pointer",
+                background: fixedChecked[i] ? "rgba(255,138,0,0.08)" : "rgba(255,255,255,0.04)",
                 border: fixedChecked[i] ? "1px solid rgba(255,138,0,0.2)" : "1px solid rgba(255,255,255,0.06)"
               }}>
                 <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: fixedChecked[i] ? "none" : "2px solid #333", background: fixedChecked[i] ? "#FF8A00" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#000", boxShadow: fixedChecked[i] ? glow("#FF8A00", 6) : "none" }}>{fixedChecked[i] ? "✓" : ""}</div>
@@ -371,7 +371,7 @@ export default function App() {
 
       {/* STATS */}
       {view === "stats" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10, marginBottom: 8 }}>{mons.map(m => <button key={m} onClick={() => setSelMonth(m)} style={monBtn(m)}>{m}</button>)}</div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
@@ -401,7 +401,7 @@ export default function App() {
 
       {/* HISTORY */}
       {view === "history" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10, marginBottom: 8 }}>{mons.map(m => <button key={m} onClick={() => setSelMonth(m)} style={monBtn(m)}>{m}</button>)}</div>
           {(() => {
             const filtered = entries.filter(e => e.date.startsWith(selMonth)).reverse();
@@ -453,7 +453,7 @@ export default function App() {
 
       {/* SETTINGS */}
       {view === "settings" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
           <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
             {[{ k: "expense", l: "支出" }, { k: "income", l: "收入" }, { k: "savings", l: "储蓄" }, { k: "fixed", l: "固定开销" }].map(t =>
               <button key={t.k} onClick={() => setSettingsTab(t.k)} style={{
