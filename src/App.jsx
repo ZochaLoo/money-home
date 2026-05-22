@@ -253,6 +253,8 @@ export default function App() {
   const mons = [...new Set(entries.map(e => e.date.slice(0, 7)))].sort().reverse();
   if (!mons.includes(selMonth)) mons.unshift(selMonth);
   const expCatList = Object.keys(expenseCats);
+  const incCatList = Object.keys(incomeCats);
+  const savCatList = Object.keys(savingsCats);
 
   if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#08090d", color: "#fff", fontFamily: "'Noto Sans SC',sans-serif" }}><p>加载中...</p></div>;
 
@@ -274,6 +276,7 @@ export default function App() {
     <div style={{ maxWidth: 430, margin: "0 auto", height: "100vh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg, #08090d 0%, #0d0e14 50%, #0a0b10 100%)", color: "#e0e0e0", fontFamily: "'Noto Sans SC','SF Pro Display',sans-serif", overflow: "hidden" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet" />
 
+      {/* Header */}
       <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: -0.5, background: "linear-gradient(135deg, #FF8A00, #FFB347)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>🏠 Money Home</h1>
@@ -286,6 +289,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* CHAT */}
       {view === "chat" && (<>
         <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 8px" }}>
           {messages.map((msg, i) => (
@@ -327,6 +331,7 @@ export default function App() {
         </div>
       </>)}
 
+      {/* FIXED */}
       {view === "fixed" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
@@ -364,6 +369,7 @@ export default function App() {
         </div>
       )}
 
+      {/* STATS */}
       {view === "stats" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10, marginBottom: 8 }}>{mons.map(m => <button key={m} onClick={() => setSelMonth(m)} style={monBtn(m)}>{m}</button>)}</div>
@@ -377,7 +383,7 @@ export default function App() {
 
           {pie.length > 0 ? (<>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#888" }}>支出分布</div>
-            <div style={{ height: 180, marginBottom: 8 }}><ResponsiveContainer><PieChart><Pie data={pie} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" stroke="none">{pie.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip formatter={v => "RM" + v.toFixed(2)} contentStyle={{ background: "#14151a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#e0e0e0", fontSize: 12 }} /></PieChart></ResponsiveContainer></div>
+            <div style={{ height: 180, marginBottom: 8 }}><ResponsiveContainer><PieChart><Pie data={pie} cx="50%" cy="50%" innerRadius={45} outerRadius={75} dataKey="value" stroke="none">{pie.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip formatter={v => "RM" + v.toFixed(2)} contentStyle={{ background: "#14151a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#e0e0e0", fontSize: 12 }} labelStyle={{ color: "#999" }} itemStyle={{ color: "#e0e0e0" }} /></PieChart></ResponsiveContainer></div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {pie.map((item, i) => { const pct = ((item.value / expenseTotal) * 100).toFixed(1); return (
                 <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, ...cardStyle }}>
@@ -393,6 +399,7 @@ export default function App() {
         </div>
       )}
 
+      {/* HISTORY */}
       {view === "history" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 10, marginBottom: 8 }}>{mons.map(m => <button key={m} onClick={() => setSelMonth(m)} style={monBtn(m)}>{m}</button>)}</div>
@@ -444,6 +451,7 @@ export default function App() {
         </div>
       )}
 
+      {/* SETTINGS */}
       {view === "settings" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
