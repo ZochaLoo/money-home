@@ -234,7 +234,7 @@ export default function App() {
     const added = [];
     for (const i of sel) {
       const f = fixed[i]; if (!f) continue;
-      const amt = fixedAmounts[i] !== undefined ? fixedAmounts[i] : f.amount;
+      const amt = fixedAmounts[i] !== undefined ? parseFloat(fixedAmounts[i]) || 0 : f.amount;
       if (amt <= 0) continue;
       added.push({ amount: amt, type: "expense", category: f.category, payment: "Debit", icon: f.icon, raw: f.name, id: Date.now() + Math.random() + i, date: fDate(now), time: fTime(now) });
     }
@@ -289,6 +289,7 @@ export default function App() {
     boxShadow: selMonth === m ? glow("#FF8A00", 6) : "none",
   });
   const iS = { padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e0e0e0", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
+  const decimalInput = { type: "text", inputMode: "decimal", pattern: "[0-9.]*", autoComplete: "off", autoCorrect: "off", autoCapitalize: "none" };
 
   return (
     <div style={{ maxWidth: 430, margin: "0 auto", height: "100dvh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg, #08090d 0%, #0d0e14 50%, #0a0b10 100%)", color: "#e0e0e0", fontFamily: "'Noto Sans SC','SF Pro Display',sans-serif", overflow: "hidden" }}>
@@ -371,7 +372,10 @@ export default function App() {
                 <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 500 }}>{f.name}</div><div style={{ fontSize: 10, color: "#555" }}>{f.category}</div></div>
                 <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
                   <span style={{ fontSize: 12, color: "#666", marginRight: 3 }}>RM</span>
-                  <input value={fixedAmounts[i] !== undefined ? fixedAmounts[i] : f.amount} onChange={e => setFixedAmounts(p => ({ ...p, [i]: e.target.value === "" ? 0 : parseFloat(e.target.value) || 0 }))}
+                  <input {...decimalInput}
+                    value={fixedAmounts[i] !== undefined ? fixedAmounts[i] : f.amount}
+                    onChange={e => setFixedAmounts(p => ({ ...p, [i]: e.target.value }))}
+                    onBlur={e => { const v = parseFloat(e.target.value); setFixedAmounts(p => ({ ...p, [i]: isNaN(v) ? 0 : v })); }}
                     style={{ width: 55, padding: "3px 6px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e0e0e0", fontSize: 12, textAlign: "right", outline: "none" }} />
                 </div>
               </div>
@@ -380,7 +384,7 @@ export default function App() {
           <div style={{ paddingTop: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8, padding: "0 4px" }}>
               <span style={{ color: "#666" }}>已选 {Object.values(fixedChecked).filter(Boolean).length} 项</span>
-              <span style={{ color: "#FF8A00", fontWeight: 600 }}>RM{Object.entries(fixedChecked).filter(([, v]) => v).reduce((s, [i]) => s + (fixedAmounts[parseInt(i)] || 0), 0).toFixed(2)}</span>
+              <span style={{ color: "#FF8A00", fontWeight: 600 }}>RM{Object.entries(fixedChecked).filter(([, v]) => v).reduce((s, [i]) => s + (parseFloat(fixedAmounts[parseInt(i)]) || 0), 0).toFixed(2)}</span>
             </div>
             <button onClick={recordFixed} style={{ width: "100%", padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #FF8A00, #FFa040)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: glow("#FF8A00", 10) }}>📌 记录已选开销</button>
           </div>
@@ -402,7 +406,7 @@ export default function App() {
             <div style={{ ...cardStyle, padding: 12, boxShadow: glow(balance >= 0 ? "#FFB347" : "#E85555", 6) }}><div style={{ fontSize: 10, color: "#666", marginBottom: 3 }}>📊 结余</div><div style={{ fontSize: 20, fontWeight: 700, color: balance >= 0 ? "#FFF2DF" : "#E85555" }}>RM{balance.toFixed(2)}</div></div>
           </div>
 
-          {/* Trend Line Chart - only in "全部" view */}
+          {/* Trend Line Chart */}
           {isAll && (() => {
             const tCatList = trendType === "income" ? incCatList : trendType === "savings" ? savCatList : expCatList;
             const tCatMap = trendType === "income" ? incomeCats : trendType === "savings" ? savingsCats : expenseCats;
@@ -671,7 +675,6 @@ export default function App() {
             <div style={{ textAlign: "center", padding: 40, color: "#444" }}><div style={{ fontSize: 36, marginBottom: 12 }}>📊</div><p style={{ fontSize: 13 }}>{isAll ? "还没有任何记录" : "这个月还没有记录"}</p></div>
           )}
 
-          {/* Export CSV */}
           {entries.length > 0 && (
             <button onClick={() => {
               const header = "日期,时间,类型,分类,金额,支付方式,备注\n";
@@ -824,7 +827,7 @@ export default function App() {
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>➕ 添加固定开销</div>
               <input placeholder="名称" value={newFixed.name} onChange={e => setNewFixed(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", marginBottom: 6 }} />
               <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                <input placeholder="金额" type="text" inputMode="decimal" pattern="[0-9.]*" autoComplete="off" autoCorrect="off" autoCapitalize="none" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0 }} />
+                <input {...decimalInput} placeholder="金额" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0 }} />
                 <select value={newFixed.category} onChange={e => setNewFixed(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, maxWidth: "50%" }}>
                   <option value="">选分类</option>
                   {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
@@ -848,7 +851,7 @@ export default function App() {
                     <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                       <input value={editFixedData.name} onChange={e => setEditFixedData(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 6 }} />
                       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                        <input type="text" inputMode="decimal" pattern="[0-9.]*" autoComplete="off" autoCorrect="off" autoCapitalize="none" value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 8px" }} />
+                        <input {...decimalInput} value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 8px" }} />
                         <select value={editFixedData.category} onChange={e => setEditFixedData(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", maxWidth: "50%" }}>
                           {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
                         </select>
