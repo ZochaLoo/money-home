@@ -824,7 +824,7 @@ export default function App() {
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>➕ 添加固定开销</div>
               <input placeholder="名称" value={newFixed.name} onChange={e => setNewFixed(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", marginBottom: 6 }} />
               <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                <input placeholder="金额" type="text" inputMode="decimal" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0 }} />
+                <input placeholder="金额" type="text" inputMode="decimal" pattern="[0-9.]*" autoComplete="off" autoCorrect="off" autoCapitalize="none" value={newFixed.amount} onChange={e => setNewFixed(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0 }} />
                 <select value={newFixed.category} onChange={e => setNewFixed(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, maxWidth: "50%" }}>
                   <option value="">选分类</option>
                   {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
@@ -848,7 +848,7 @@ export default function App() {
                     <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                       <input value={editFixedData.name} onChange={e => setEditFixedData(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 6 }} />
                       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                        <input type="text" inputMode="decimal" value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px" }} />
+                        <input type="text" inputMode="decimal" pattern="[0-9.]*" autoComplete="off" autoCorrect="off" autoCapitalize="none" value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 8px" }} />
                         <select value={editFixedData.category} onChange={e => setEditFixedData(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", maxWidth: "50%" }}>
                           {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
                         </select>
