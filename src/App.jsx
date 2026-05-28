@@ -145,9 +145,10 @@ export default function App() {
 
   function parseInput(text) {
     const l = text.toLowerCase().trim();
-    const m = l.match(/(\d+\.?\d*)/);
-    if (!m) return null;
-    const amount = parseFloat(m[1]);
+    const nums = [...l.matchAll(/\d+\.?\d*/g)];
+    if (!nums.length) return null;
+    const m = nums[nums.length - 1];
+    const amount = parseFloat(m[0]);
     if (amount <= 0 || isNaN(amount)) return null;
     const type = detectType(l);
     const category = detectCategory(l, type);
@@ -375,7 +376,7 @@ export default function App() {
                   <input {...decimalInput}
                     value={fixedAmounts[i] !== undefined ? fixedAmounts[i] : f.amount}
                     onChange={e => setFixedAmounts(p => ({ ...p, [i]: e.target.value }))}
-                    onBlur={e => { const v = parseFloat(e.target.value); setFixedAmounts(p => ({ ...p, [i]: isNaN(v) ? 0 : v })); }}
+                    onBlur={e => { const v = parseFloat(e.target.value); const safe = isNaN(v) ? 0 : v; setFixedAmounts(p => ({ ...p, [i]: safe })); setFixed(p => p.map((f2, j) => j === i ? { ...f2, amount: safe } : f2)); }}
                     style={{ width: 55, padding: "3px 6px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e0e0e0", fontSize: 12, textAlign: "right", outline: "none" }} />
                 </div>
               </div>
@@ -837,7 +838,10 @@ export default function App() {
                 style={{ width: "100%", padding: "8px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #FF8A00, #FFa040)", color: "#000", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>添加</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {fixed.map((f, i) => (
+              {fixed.map((f, i) => {
+                const liveAmt = fixedAmounts[i] !== undefined ? parseFloat(fixedAmounts[i]) : f.amount;
+                const mismatch = !isNaN(liveAmt) && Math.abs(liveAmt - f.amount) > 0.001;
+                return (
                 <div key={i} style={{ ...cardStyle, overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
                     <span style={{ fontSize: 15, flexShrink: 0 }}>{f.icon}</span>
@@ -847,6 +851,13 @@ export default function App() {
                     <button onClick={() => setFixed(p => p.filter((_, j) => j !== i))}
                       style={{ background: "none", border: "none", color: "#E85555", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>删除</button>
                   </div>
+                  {mismatch && (
+                    <div style={{ padding: "6px 10px", borderTop: "1px solid rgba(255,138,0,0.2)", background: "rgba(255,138,0,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontSize: 10, color: "#FFB347" }}>⚠️ 固定页面金额为 RM{liveAmt.toFixed(2)}，与此不同</span>
+                      <button onClick={() => setFixed(p => p.map((f2, j) => j === i ? { ...f2, amount: liveAmt } : f2))}
+                        style={{ background: "none", border: "1px solid rgba(255,138,0,0.4)", borderRadius: 6, color: "#FF8A00", fontSize: 10, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>以固定页面为准</button>
+                    </div>
+                  )}
                   {editFixedIdx === i && (
                     <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                       <input value={editFixedData.name} onChange={e => setEditFixedData(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 6 }} />
@@ -859,7 +870,9 @@ export default function App() {
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => {
                           const cat = editFixedData.category || expCatList[0];
-                          setFixed(p => p.map((f2, j) => j === i ? { name: editFixedData.name.trim(), amount: parseFloat(editFixedData.amount) || 0, category: cat, icon: expenseCats[cat]?.icon || "📌" } : f2));
+                          const newAmt = parseFloat(editFixedData.amount) || 0;
+                          setFixed(p => p.map((f2, j) => j === i ? { name: editFixedData.name.trim(), amount: newAmt, category: cat, icon: expenseCats[cat]?.icon || "📌" } : f2));
+                          setFixedAmounts(p => ({ ...p, [i]: newAmt }));
                           setEditFixedIdx(null);
                         }} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "none", background: "#FF8A00", color: "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>保存</button>
                         <button onClick={() => setEditFixedIdx(null)} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#666", fontSize: 12, cursor: "pointer" }}>取消</button>
@@ -867,7 +880,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              ))}
+              ); })}
             </div>
           </>)}
         </div>
