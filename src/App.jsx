@@ -86,7 +86,9 @@ export default function App() {
   const [editBudget, setEditBudget] = useState(false);
   const [trendCat, setTrendCat] = useState("all");
   const [trendType, setTrendType] = useState("expense");
+  const [importConfirm, setImportConfirm] = useState(null); // parsed entries awaiting confirm
   const chatEnd = useRef(null);
+  const importInputRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -111,7 +113,7 @@ export default function App() {
     }
   }, [entries, incomeCats, expenseCats, savingsCats, fixed, fixedAmounts, budget, loading]);
 
-  useEffect(() => { if (!loading && messages.length === 0) setMessages([{ type: "bot", time: fTime(new Date()), text: "嗨！记账、记收入、记储蓄都行 😊\n\n💸「午餐 12」→ 支出\n💰「薪水 8000」→ 收入\n🏦「储蓄 ryt 2000」→ 储蓄\n✏️「改」修改上一条\n🗑️「删除」删除上一条\n\n默认Debit，可写tng或信用卡" }]); }, [loading]);
+  useEffect(() => { if (!loading && messages.length === 0) setMessages([{ type: "bot", time: fTime(new Date()), text: "嗨！记账、记收入、记储蓄都行 😊\n\n💸「午餐 12」→ 支出\n💰「薪水 8000」→ 收入\n🏦「储蓄 ryt 2000」→ 储蓄\n✏️「改」修改上一条\n🗑️「删除」删除上一条\n\n支持指定日期：「昨天 午餐 12」「6/3 咖啡 8」" }]); }, [loading]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { setFixedAmounts(p => { const n = { ...p }; fixed.forEach((f, i) => { if (n[i] === undefined) n[i] = f.amount; }); return n; }); }, [fixed]);
 
@@ -143,6 +145,110 @@ export default function App() {
 
   function getCatMap(type) { return type === "income" ? incomeCats : type === "savings" ? savingsCats : expenseCats; }
 
+  // Extract date from text; returns { date: "YYYY-MM-DD" | null, clean: text_without_date }
+  function extractDate(text) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let d = null; let clean = text;
+
+    if (/昨天/.test(text)) {
+      d = new Date(today); d.setDate(d.getDate() - 1);
+      return { date: fDate(d), clean: text.replace(/昨天\s*/, "").trim() };
+    }
+    if (/前天/.test(text)) {
+      d = new Date(today); d.setDate(d.getDate() - 2);
+      return { date: fDate(d), clean: text.replace(/前天\s*/, "").trim() };
+    }
+    // N月N日 or N月N号 (anywhere in text)
+    const mMD = text.match(/(\d{1,2})月(\d{1,2})[日号]/);
+    if (mMD) {
+      d = new Date(today.getFullYear(), parseInt(mMD[1]) - 1, parseInt(mMD[2]));
+      if (d > today) d.setFullYear(d.getFullYear() - 1);
+      return { date: fDate(d), clean: text.replace(mMD[0], "").trim() };
+    }
+    // N/N at start of text
+    const mS = text.match(/^(\d{1,2})\/(\d{1,2})\s*/);
+    if (mS) {
+      d = new Date(today.getFullYear(), parseInt(mS[1]) - 1, parseInt(mS[2]));
+      if (d > today) d.setFullYear(d.getFullYear() - 1);
+      return { date: fDate(d), clean: text.replace(mS[0], "").trim() };
+    }
+    // N号 at start of text
+    const mD = text.match(/^(\d{1,2})号\s*/);
+    if (mD) {
+      d = new Date(today.getFullYear(), today.getMonth(), parseInt(mD[1]));
+      if (d > today) d.setMonth(d.getMonth() - 1);
+      return { date: fDate(d), clean: text.replace(mD[0], "").trim() };
+    }
+    return { date: null, clean: text };
+  }
+
+  // Parse one CSV line, handling quoted fields
+  function parseCSVLine(line) {
+    const result = []; let field = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQ) {
+        if (c === '"' && line[i + 1] === '"') { field += '"'; i++; }
+        else if (c === '"') { inQ = false; }
+        else { field += c; }
+      } else {
+        if (c === '"') { inQ = true; }
+        else if (c === ',') { result.push(field); field = ""; }
+        else { field += c; }
+      }
+    }
+    result.push(field);
+    return result;
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const text = ev.target.result.replace(/^﻿/, "");
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { addMsg("bot", "⚠️ 导入失败：文件格式不对或没有数据"); return; }
+        const parsed = [];
+        for (let i = 1; i < lines.length; i++) {
+          const f = parseCSVLine(lines[i]);
+          if (f.length < 6) continue;
+          const [date, time, typeStr, category, amtStr, payment, raw = ""] = f;
+          const amount = parseFloat(amtStr);
+          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(amount)) continue;
+          const type = typeStr === "收入" ? "income" : typeStr === "储蓄" ? "savings" : "expense";
+          const catMapLookup = type === "income" ? incomeCats : type === "savings" ? savingsCats : expenseCats;
+          const icon = catMapLookup[category]?.icon || "📝";
+          parsed.push({ id: Date.now() + Math.random() + i, date, time: time || "00:00", type, category, amount, payment: payment || "Debit", raw, icon });
+        }
+        if (!parsed.length) { addMsg("bot", "⚠️ 导入失败：没有找到有效记录，请检查文件格式"); return; }
+        setImportConfirm(parsed);
+      } catch {
+        addMsg("bot", "⚠️ 导入失败：读取文件时出错，请检查文件格式");
+      }
+    };
+    reader.readAsText(file, "UTF-8");
+  }
+
+  function doImport(mode) {
+    if (!importConfirm) return;
+    const count = importConfirm.length;
+    if (mode === "replace") {
+      setEntries(importConfirm);
+    } else {
+      setEntries(p => {
+        const keys = new Set(p.map(e => `${e.date}|${e.time}|${e.category}|${e.amount}`));
+        const toAdd = importConfirm.filter(e => !keys.has(`${e.date}|${e.time}|${e.category}|${e.amount}`));
+        return [...p, ...toAdd];
+      });
+    }
+    setImportConfirm(null);
+    addMsg("bot", `✅ ${mode === "replace" ? "覆盖" : "合并"}导入成功，共 ${count} 条记录`);
+    setView("chat");
+  }
+
   function parseInput(text) {
     const l = text.toLowerCase().trim();
     const nums = [...l.matchAll(/\d+\.?\d*/g)];
@@ -158,9 +264,9 @@ export default function App() {
     return { amount, type, category: null, payment, icon: "❓", raw: text };
   }
 
-  function saveEntry(data) {
+  function saveEntry(data, overrideDate) {
     const now = new Date();
-    const entry = { ...data, id: Date.now() + Math.random(), date: fDate(now), time: fTime(now) };
+    const entry = { ...data, id: Date.now() + Math.random(), date: overrideDate || fDate(now), time: fTime(now) };
     setEntries(p => [...p, entry]);
     return entry;
   }
@@ -170,7 +276,7 @@ export default function App() {
     const catMap = getCatMap(pending.data.type);
     const icon = catMap[cat]?.icon || "📝";
     if (pending.mode === "new") {
-      const s = saveEntry({ ...pending.data, category: cat, icon });
+      const s = saveEntry({ ...pending.data, category: cat, icon }, pending.data.overrideDate);
       const prefix = s.type === "income" ? "💰" : s.type === "savings" ? "🏦" : "💸";
       addMsg("user", cat);
       addMsg("bot", `${prefix} ${icon} ${cat} RM${s.amount.toFixed(2)} · ${parseInt(s.date.split("-")[2])}/${parseInt(s.date.split("-")[1])}`);
@@ -208,9 +314,11 @@ export default function App() {
     const lines = text.split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
     const ok = []; let ask = null;
     for (const line of lines) {
-      const p = parseInput(line);
+      const { date: overDate, clean } = extractDate(line);
+      const p = parseInput(clean);
       if (!p) continue;
-      if (p.category === null) { ask = p; } else { ok.push(saveEntry(p)); }
+      if (overDate) p.overrideDate = overDate;
+      if (p.category === null) { ask = p; } else { ok.push(saveEntry(p, overDate)); }
     }
     if (ok.length > 0) {
       const res = ok.map(r => {
@@ -222,7 +330,8 @@ export default function App() {
     if (ask) {
       setPending({ mode: "new", data: ask, catType: ask.type });
       const label = ask.type === "income" ? "收入" : ask.type === "savings" ? "储蓄" : "支出";
-      addMsg("bot", `🤔「${ask.raw}」RM${ask.amount.toFixed(2)}（${label}）\n归到哪个分类？`, { showCats: true, catType: ask.type });
+      const dateNote = ask.overrideDate ? ` · ${parseInt(ask.overrideDate.split("-")[2])}/${parseInt(ask.overrideDate.split("-")[1])}日` : "";
+      addMsg("bot", `🤔「${ask.raw}」RM${ask.amount.toFixed(2)}（${label}${dateNote}）\n归到哪个分类？`, { showCats: true, catType: ask.type });
     } else if (ok.length === 0 && !ask) {
       addMsg("bot", "🤔 没识别到金额\n\n支出：「午餐 12」\n收入：「薪水 8000」\n储蓄：「储蓄 ryt 2000」");
     }
@@ -340,7 +449,7 @@ export default function App() {
         </div>
         <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)", display: "flex", gap: 8, alignItems: "center" }}>
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleSend(); }}
-            placeholder="午餐 12 / 薪水 8000 / 改 / 删除"
+            placeholder="昨天 午餐 12 / 薪水 8000 / 改 / 删除"
             style={{ flex: 1, padding: "11px 16px", borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e0e0e0", fontSize: 15, outline: "none", fontFamily: "inherit" }} />
           <button onClick={handleSend} style={{
             width: 42, height: 42, borderRadius: "50%", border: "none",
@@ -413,47 +522,30 @@ export default function App() {
             const tCatMap = trendType === "income" ? incomeCats : trendType === "savings" ? savingsCats : expenseCats;
             const year = new Date().getFullYear();
             const allMonths12 = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
-
             let chartData, trendEntries;
-
             if (trendType === "overview") {
-              chartData = allMonths12.map(m => {
-                const total = entries.filter(e => e.date.startsWith(m) && e.type === "expense").reduce((s, e) => s + e.amount, 0);
-                return { month: m.slice(5), 总支出: Math.round(total) };
-              });
+              chartData = allMonths12.map(m => { const total = entries.filter(e => e.date.startsWith(m) && e.type === "expense").reduce((s, e) => s + e.amount, 0); return { month: m.slice(5), 总支出: Math.round(total) }; });
               trendEntries = null;
             } else {
               const filtered = entries.filter(e => e.type === trendType && (trendCat === "all" || e.category === trendCat));
-              chartData = allMonths12.map(m => {
-                const amt = filtered.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0);
-                return { month: m.slice(5), 金额: Math.round(amt * 100) / 100 };
-              });
+              chartData = allMonths12.map(m => { const amt = filtered.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0); return { month: m.slice(5), 金额: Math.round(amt * 100) / 100 }; });
               trendEntries = filtered.slice().reverse();
             }
-
             const typeColor = trendType === "income" ? "#FFF2DF" : trendType === "savings" ? "#4A9FD6" : "#FF8A00";
-
             return (
               <div style={{ ...cardStyle, padding: 14, marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#888", marginBottom: 10 }}>📈 趋势分析</div>
-
                 <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
                   {[{ k: "overview", l: "总览" }, { k: "expense", l: "支出" }, { k: "income", l: "收入" }, { k: "savings", l: "储蓄" }].map(t =>
-                    <button key={t.k} onClick={() => { setTrendType(t.k); setTrendCat("all"); }} style={{
-                      flex: 1, padding: "5px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500,
-                      background: trendType === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.06)",
-                      color: trendType === t.k ? "#fff" : "#666"
-                    }}>{t.l}</button>
+                    <button key={t.k} onClick={() => { setTrendType(t.k); setTrendCat("all"); }} style={{ flex: 1, padding: "5px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500, background: trendType === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.06)", color: trendType === t.k ? "#fff" : "#666" }}>{t.l}</button>
                   )}
                 </div>
-
                 {trendType !== "overview" && (
                   <select value={trendCat} onChange={e => setTrendCat(e.target.value)} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 10 }}>
                     <option value="all">全部分类</option>
                     {tCatList.map(c => <option key={c} value={c}>{tCatMap[c]?.icon} {c}</option>)}
                   </select>
                 )}
-
                 <div style={{ height: 200, marginBottom: 8 }}>
                   <ResponsiveContainer>
                     <LineChart data={chartData}>
@@ -461,19 +553,11 @@ export default function App() {
                       <XAxis dataKey="month" tick={{ fill: "#666", fontSize: 10 }} axisLine={{ stroke: "rgba(255,255,255,0.1)" }} />
                       <YAxis tick={{ fill: "#666", fontSize: 10 }} axisLine={{ stroke: "rgba(255,255,255,0.1)" }} width={45} />
                       <Tooltip contentStyle={{ background: "#14151a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#e0e0e0", fontSize: 12 }} labelStyle={{ color: "#999" }} />
-                      {trendType === "overview" ? (
-                        <Line type="monotone" dataKey="总支出" stroke="#FF8A00" strokeWidth={2} dot={{ r: 3, fill: "#FF8A00" }} />
-                      ) : (
-                        <Line type="monotone" dataKey="金额" stroke={typeColor} strokeWidth={2} dot={{ r: 4, fill: typeColor }} />
-                      )}
+                      {trendType === "overview" ? <Line type="monotone" dataKey="总支出" stroke="#FF8A00" strokeWidth={2} dot={{ r: 3, fill: "#FF8A00" }} /> : <Line type="monotone" dataKey="金额" stroke={typeColor} strokeWidth={2} dot={{ r: 4, fill: typeColor }} />}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-
-                {trendType === "overview" && (
-                  <div style={{ fontSize: 11, color: "#666", textAlign: "center" }}>显示 {year} 年每月总支出趋势</div>
-                )}
-
+                {trendType === "overview" && <div style={{ fontSize: 11, color: "#666", textAlign: "center" }}>显示 {year} 年每月总支出趋势</div>}
                 {trendEntries && trendEntries.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>📋 {trendCat === "all" ? "全部" : trendCat} · {trendEntries.length} 笔记录</div>
@@ -481,10 +565,7 @@ export default function App() {
                       {trendEntries.map(e => (
                         <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}>
                           <span style={{ fontSize: 12, flexShrink: 0 }}>{e.icon}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.raw}</div>
-                            <div style={{ fontSize: 10, color: "#555" }}>{e.date} · {e.category}</div>
-                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.raw}</div><div style={{ fontSize: 10, color: "#555" }}>{e.date} · {e.category}</div></div>
                           <span style={{ fontSize: 12, fontWeight: 600, color: typeColor, flexShrink: 0 }}>RM{e.amount.toFixed(2)}</span>
                         </div>
                       ))}
@@ -512,53 +593,29 @@ export default function App() {
                 else if (ratio > 0.5) { barColor = "#FFB347"; msg = "⚠️ 要注意花钱哦~"; }
                 else { barColor = "#4CAF50"; msg = "✨ 要精明用钱哦~"; }
                 return (<>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, color: "#666" }}>收入 RM{incomeTotal.toFixed(2)} - 储蓄 RM{savingsTotal.toFixed(2)}</span>
-                    <span style={{ fontSize: 11, color: "#888" }}>可花 RM{available.toFixed(2)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: "#FF8A00", fontWeight: 500 }}>已花 RM{spent.toFixed(2)}</span>
-                    <span style={{ fontSize: 12, color: remaining >= 0 ? "#FFF2DF" : "#E85555", fontWeight: 500 }}>剩余 RM{remaining.toFixed(2)}</span>
-                  </div>
-                  <div style={{ height: 10, borderRadius: 5, background: "rgba(255,255,255,0.06)", marginBottom: 8, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 5, width: (overBudget ? 100 : pct) + "%", background: barColor, boxShadow: glow(barColor, 6), transition: "width 0.5s, background 0.3s" }} />
-                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontSize: 11, color: "#666" }}>收入 RM{incomeTotal.toFixed(2)} - 储蓄 RM{savingsTotal.toFixed(2)}</span><span style={{ fontSize: 11, color: "#888" }}>可花 RM{available.toFixed(2)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><span style={{ fontSize: 12, color: "#FF8A00", fontWeight: 500 }}>已花 RM{spent.toFixed(2)}</span><span style={{ fontSize: 12, color: remaining >= 0 ? "#FFF2DF" : "#E85555", fontWeight: 500 }}>剩余 RM{remaining.toFixed(2)}</span></div>
+                  <div style={{ height: 10, borderRadius: 5, background: "rgba(255,255,255,0.06)", marginBottom: 8, overflow: "hidden" }}><div style={{ height: "100%", borderRadius: 5, width: (overBudget ? 100 : pct) + "%", background: barColor, boxShadow: glow(barColor, 6), transition: "width 0.5s, background 0.3s" }} /></div>
                   <div style={{ textAlign: "center", fontSize: 12, color: barColor, fontWeight: 500 }}>{msg}</div>
                   {overBudget && <div style={{ textAlign: "center", fontSize: 11, color: "#E85555", marginTop: 4 }}>超出 RM{(spent - available).toFixed(2)} 💸</div>}
                 </>);
-              })() : (
-                <div style={{ textAlign: "center", fontSize: 12, color: "#555", padding: "8px 0" }}>请先记录本月收入，才能计算预算 💰</div>
-              )}
+              })() : <div style={{ textAlign: "center", fontSize: 12, color: "#555", padding: "8px 0" }}>请先记录本月收入，才能计算预算 💰</div>}
             </div>
           )}
 
           {/* Custom Query */}
-          <button onClick={() => setShowQuery(p => !p)} style={{
-            width: "100%", padding: "10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
-            background: showQuery ? "rgba(255,138,0,0.1)" : "rgba(255,255,255,0.04)",
-            color: showQuery ? "#FF8A00" : "#888", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12,
-            textAlign: "center"
-          }}>
+          <button onClick={() => setShowQuery(p => !p)} style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: showQuery ? "rgba(255,138,0,0.1)" : "rgba(255,255,255,0.04)", color: showQuery ? "#FF8A00" : "#888", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12, textAlign: "center" }}>
             🔍 {showQuery ? "收起自定义查询" : "自定义区间查询"}
           </button>
 
           {showQuery && (() => {
             const qCatList2 = qType === "income" ? incCatList : qType === "savings" ? savCatList : expCatList;
             const qCatMap2 = qType === "income" ? incomeCats : qType === "savings" ? savingsCats : expenseCats;
-            const qFiltered = entries.filter(e => {
-              if (e.type !== qType) return false;
-              const m = e.date.slice(0, 7);
-              if (qStart && m < qStart) return false;
-              if (qEnd && m > qEnd) return false;
-              if (qCat !== "all" && e.category !== qCat) return false;
-              return true;
-            });
+            const qFiltered = entries.filter(e => { if (e.type !== qType) return false; const m = e.date.slice(0, 7); if (qStart && m < qStart) return false; if (qEnd && m > qEnd) return false; if (qCat !== "all" && e.category !== qCat) return false; return true; });
             const qTotal = qFiltered.reduce((s, e) => s + e.amount, 0);
-            const qByMonth = {};
-            qFiltered.forEach(e => { const m = e.date.slice(0, 7); qByMonth[m] = (qByMonth[m] || 0) + e.amount; });
+            const qByMonth = {}; qFiltered.forEach(e => { const m = e.date.slice(0, 7); qByMonth[m] = (qByMonth[m] || 0) + e.amount; });
             const qMonthList = Object.entries(qByMonth).sort((a, b) => a[0].localeCompare(b[0]));
-            const qByCat = {};
-            qFiltered.forEach(e => { qByCat[e.category] = (qByCat[e.category] || 0) + e.amount; });
+            const qByCat = {}; qFiltered.forEach(e => { qByCat[e.category] = (qByCat[e.category] || 0) + e.amount; });
             const qCatBreak = Object.entries(qByCat).sort((a, b) => b[1] - a[1]);
             const typeLabel = qType === "income" ? "收入" : qType === "savings" ? "储蓄" : "支出";
             const typeColor = qType === "income" ? "#FFF2DF" : qType === "savings" ? "#4A9FD6" : "#FF8A00";
@@ -566,66 +623,23 @@ export default function App() {
               <div style={{ ...cardStyle, padding: 14, marginBottom: 14 }}>
                 <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                   {[{ k: "expense", l: "支出" }, { k: "income", l: "收入" }, { k: "savings", l: "储蓄" }].map(t =>
-                    <button key={t.k} onClick={() => { setQType(t.k); setQCat("all"); }} style={{
-                      flex: 1, padding: "6px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500,
-                      background: qType === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.06)",
-                      color: qType === t.k ? "#fff" : "#666"
-                    }}>{t.l}</button>
+                    <button key={t.k} onClick={() => { setQType(t.k); setQCat("all"); }} style={{ flex: 1, padding: "6px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500, background: qType === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.06)", color: qType === t.k ? "#fff" : "#666" }}>{t.l}</button>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-                  <select value={qStart} onChange={e => setQStart(e.target.value)} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", minWidth: 0 }}>
-                    <option value="">开始月份</option>
-                    {mons.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <select value={qStart} onChange={e => setQStart(e.target.value)} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", minWidth: 0 }}><option value="">开始月份</option>{mons.map(m => <option key={m} value={m}>{m}</option>)}</select>
                   <span style={{ color: "#666", fontSize: 12 }}>→</span>
-                  <select value={qEnd} onChange={e => setQEnd(e.target.value)} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", minWidth: 0 }}>
-                    <option value="">结束月份</option>
-                    {mons.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <select value={qEnd} onChange={e => setQEnd(e.target.value)} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", minWidth: 0 }}><option value="">结束月份</option>{mons.map(m => <option key={m} value={m}>{m}</option>)}</select>
                 </div>
-                <select value={qCat} onChange={e => setQCat(e.target.value)} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 10 }}>
-                  <option value="all">全部{typeLabel}分类</option>
-                  {qCatList2.map(c => <option key={c} value={c}>{qCatMap2[c]?.icon} {c}</option>)}
-                </select>
+                <select value={qCat} onChange={e => setQCat(e.target.value)} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 10 }}><option value="all">全部{typeLabel}分类</option>{qCatList2.map(c => <option key={c} value={c}>{qCatMap2[c]?.icon} {c}</option>)}</select>
                 <div style={{ ...cardStyle, padding: 12, textAlign: "center", marginBottom: 10, boxShadow: glow(typeColor, 6) }}>
                   <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>{qStart || "最早"} ~ {qEnd || "最新"} · {qCat === "all" ? "全部" + typeLabel : qCat}</div>
                   <div style={{ fontSize: 28, fontWeight: 700, color: typeColor }}>RM{qTotal.toFixed(2)}</div>
                   <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>{qFiltered.length} 笔记录</div>
                 </div>
-                {qMonthList.length > 1 && (<div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>按月明细</div>
-                  {qMonthList.map(([m, amt]) => (
-                    <div key={m} style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}>
-                      <span style={{ fontSize: 12, color: "#888" }}>{m}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: typeColor }}>RM{amt.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>)}
-                {qCat === "all" && qCatBreak.length > 1 && (<div>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>按分类明细</div>
-                  {qCatBreak.map(([c, amt]) => (
-                    <div key={c} style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}>
-                      <span style={{ fontSize: 12, color: "#888" }}>{qCatMap2[c]?.icon} {c}</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: typeColor }}>RM{amt.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </div>)}
-                {qFiltered.length > 0 && (<div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>📋 全部 {qFiltered.length} 笔记录</div>
-                  <div style={{ maxHeight: 250, overflowY: "auto" }}>
-                    {qFiltered.slice().reverse().map(e => (
-                      <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, flexShrink: 0 }}>{e.icon}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.raw}</div>
-                          <div style={{ fontSize: 10, color: "#555" }}>{e.date} · {e.category}</div>
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: typeColor, flexShrink: 0 }}>RM{e.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>)}
+                {qMonthList.length > 1 && (<div style={{ marginBottom: 8 }}><div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>按月明细</div>{qMonthList.map(([m, amt]) => (<div key={m} style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}><span style={{ fontSize: 12, color: "#888" }}>{m}</span><span style={{ fontSize: 12, fontWeight: 600, color: typeColor }}>RM{amt.toFixed(2)}</span></div>))}</div>)}
+                {qCat === "all" && qCatBreak.length > 1 && (<div><div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>按分类明细</div>{qCatBreak.map(([c, amt]) => (<div key={c} style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}><span style={{ fontSize: 12, color: "#888" }}>{qCatMap2[c]?.icon} {c}</span><span style={{ fontSize: 12, fontWeight: 600, color: typeColor }}>RM{amt.toFixed(2)}</span></div>))}</div>)}
+                {qFiltered.length > 0 && (<div style={{ marginTop: 8 }}><div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>📋 全部 {qFiltered.length} 笔记录</div><div style={{ maxHeight: 250, overflowY: "auto" }}>{qFiltered.slice().reverse().map(e => (<div key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 8, background: "rgba(255,255,255,0.03)", marginBottom: 3 }}><span style={{ fontSize: 12, flexShrink: 0 }}>{e.icon}</span><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.raw}</div><div style={{ fontSize: 10, color: "#555" }}>{e.date} · {e.category}</div></div><span style={{ fontSize: 12, fontWeight: 600, color: typeColor, flexShrink: 0 }}>RM{e.amount.toFixed(2)}</span></div>))}</div></div>)}
               </div>
             );
           })()}
@@ -649,7 +663,7 @@ export default function App() {
           {incBreakdown.length > 0 && (<>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#888" }}>💰 收入明细</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
-              {incBreakdown.map((item) => (
+              {incBreakdown.map(item => (
                 <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, ...cardStyle }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>{incomeCats[item.name]?.icon || "💰"}</span>
                   <div style={{ flex: 1 }}><span style={{ fontSize: 12 }}>{item.name}</span></div>
@@ -662,7 +676,7 @@ export default function App() {
           {savBreakdown.length > 0 && (<>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#888" }}>🏦 储蓄明细</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
-              {savBreakdown.map((item) => (
+              {savBreakdown.map(item => (
                 <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, ...cardStyle }}>
                   <span style={{ fontSize: 14, flexShrink: 0 }}>{savingsCats[item.name]?.icon || "🏦"}</span>
                   <div style={{ flex: 1 }}><span style={{ fontSize: 12 }}>{item.name}</span></div>
@@ -676,25 +690,24 @@ export default function App() {
             <div style={{ textAlign: "center", padding: 40, color: "#444" }}><div style={{ fontSize: 36, marginBottom: 12 }}>📊</div><p style={{ fontSize: 13 }}>{isAll ? "还没有任何记录" : "这个月还没有记录"}</p></div>
           )}
 
-          {entries.length > 0 && (
-            <button onClick={() => {
-              const header = "日期,时间,类型,分类,金额,支付方式,备注\n";
-              const rows = entries.map(e =>
-                `${e.date},${e.time},${e.type === "income" ? "收入" : e.type === "savings" ? "储蓄" : "支出"},${e.category},${e.amount.toFixed(2)},${e.payment || "Debit"},"${(e.raw || "").replace(/"/g, '""')}"`
-              ).join("\n");
-              const bom = "﻿";
-              const blob = new Blob([bom + header + rows], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url; a.download = `MoneyHome_${new Date().toISOString().slice(0,10)}.csv`;
-              a.click(); URL.revokeObjectURL(url);
-            }} style={{
-              width: "100%", padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.04)", color: "#888", fontSize: 13, cursor: "pointer", marginTop: 8
-            }}>
-              📥 导出全部数据 (CSV)
+          {/* Export + Import CSV */}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {entries.length > 0 && (
+              <button onClick={() => {
+                const header = "日期,时间,类型,分类,金额,支付方式,备注\n";
+                const rows = entries.map(e => `${e.date},${e.time},${e.type === "income" ? "收入" : e.type === "savings" ? "储蓄" : "支出"},${e.category},${e.amount.toFixed(2)},${e.payment || "Debit"},"${(e.raw || "").replace(/"/g, '""')}"`).join("\n");
+                const blob = new Blob(["﻿" + header + rows], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = `MoneyHome_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+              }} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#888", fontSize: 13, cursor: "pointer" }}>
+                📥 导出 CSV
+              </button>
+            )}
+            <button onClick={() => importInputRef.current?.click()} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#888", fontSize: 13, cursor: "pointer" }}>
+              📤 导入 CSV
             </button>
-          )}
+          </div>
+          <input ref={importInputRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleImportFile} />
         </div>
       )}
 
@@ -758,11 +771,7 @@ export default function App() {
         <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
           <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
             {[{ k: "expense", l: "支出" }, { k: "income", l: "收入" }, { k: "savings", l: "储蓄" }, { k: "fixed", l: "固定开销" }].map(t =>
-              <button key={t.k} onClick={() => setSettingsTab(t.k)} style={{
-                flex: 1, padding: "7px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500,
-                background: settingsTab === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.05)",
-                color: settingsTab === t.k ? "#fff" : "#666"
-              }}>{t.l}</button>
+              <button key={t.k} onClick={() => setSettingsTab(t.k)} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 500, background: settingsTab === t.k ? "linear-gradient(135deg, #FF8A00, #FFa040)" : "rgba(255,255,255,0.05)", color: settingsTab === t.k ? "#fff" : "#666" }}>{t.l}</button>
             )}
           </div>
 
@@ -789,10 +798,8 @@ export default function App() {
                         <div style={{ fontSize: 12, fontWeight: 500 }}>{c}</div>
                         <div style={{ fontSize: 10, color: "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(catMap[c]?.kw || []).join(", ")}</div>
                       </div>
-                      <button onClick={() => { setEditKey(c); setEditData({ name: c, icon: catMap[c]?.icon || "", kw: (catMap[c]?.kw || []).join(", ") }); }}
-                        style={{ background: "none", border: "none", color: "#4A9FD6", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>编辑</button>
-                      <button onClick={() => setCatMap(p => { const n = { ...p }; delete n[c]; return n; })}
-                        style={{ background: "none", border: "none", color: "#E85555", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>删除</button>
+                      <button onClick={() => { setEditKey(c); setEditData({ name: c, icon: catMap[c]?.icon || "", kw: (catMap[c]?.kw || []).join(", ") }); }} style={{ background: "none", border: "none", color: "#4A9FD6", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>编辑</button>
+                      <button onClick={() => setCatMap(p => { const n = { ...p }; delete n[c]; return n; })} style={{ background: "none", border: "none", color: "#E85555", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>删除</button>
                     </div>
                     {editKey === c && (
                       <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -804,12 +811,7 @@ export default function App() {
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => {
                             if (!editData.name.trim()) return;
-                            setCatMap(p => {
-                              const n = {}; for (const [k, v] of Object.entries(p)) {
-                                if (k === editKey) n[editData.name.trim()] = { icon: editData.icon.trim() || v.icon, kw: editData.kw.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean) };
-                                else n[k] = v;
-                              } return n;
-                            });
+                            setCatMap(p => { const n = {}; for (const [k, v] of Object.entries(p)) { if (k === editKey) n[editData.name.trim()] = { icon: editData.icon.trim() || v.icon, kw: editData.kw.split(/[,，]/).map(s => s.trim().toLowerCase()).filter(Boolean) }; else n[k] = v; } return n; });
                             if (editData.name.trim() !== editKey) setEntries(p => p.map(e => e.category === editKey ? { ...e, category: editData.name.trim() } : e));
                             setEditKey(null);
                           }} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "none", background: "#FF8A00", color: "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>保存</button>
@@ -842,47 +844,65 @@ export default function App() {
                 const liveAmt = fixedAmounts[i] !== undefined ? parseFloat(fixedAmounts[i]) : f.amount;
                 const mismatch = !isNaN(liveAmt) && Math.abs(liveAmt - f.amount) > 0.001;
                 return (
-                <div key={i} style={{ ...cardStyle, overflow: "hidden" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
-                    <span style={{ fontSize: 15, flexShrink: 0 }}>{f.icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 500 }}>{f.name}</div><div style={{ fontSize: 10, color: "#444" }}>{f.category} · RM{f.amount}</div></div>
-                    <button onClick={() => { setEditFixedIdx(i); setEditFixedData({ name: f.name, amount: String(f.amount), category: f.category }); }}
-                      style={{ background: "none", border: "none", color: "#4A9FD6", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>编辑</button>
-                    <button onClick={() => setFixed(p => p.filter((_, j) => j !== i))}
-                      style={{ background: "none", border: "none", color: "#E85555", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>删除</button>
+                  <div key={i} style={{ ...cardStyle, overflow: "hidden" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px" }}>
+                      <span style={{ fontSize: 15, flexShrink: 0 }}>{f.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 500 }}>{f.name}</div><div style={{ fontSize: 10, color: "#444" }}>{f.category} · RM{f.amount}</div></div>
+                      <button onClick={() => { setEditFixedIdx(i); setEditFixedData({ name: f.name, amount: String(f.amount), category: f.category }); }} style={{ background: "none", border: "none", color: "#4A9FD6", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>编辑</button>
+                      <button onClick={() => setFixed(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#E85555", cursor: "pointer", fontSize: 11, padding: "3px 6px", flexShrink: 0 }}>删除</button>
+                    </div>
+                    {mismatch && (
+                      <div style={{ padding: "6px 10px", borderTop: "1px solid rgba(255,138,0,0.2)", background: "rgba(255,138,0,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: 10, color: "#FFB347" }}>⚠️ 固定页面金额为 RM{liveAmt.toFixed(2)}，与此不同</span>
+                        <button onClick={() => setFixed(p => p.map((f2, j) => j === i ? { ...f2, amount: liveAmt } : f2))} style={{ background: "none", border: "1px solid rgba(255,138,0,0.4)", borderRadius: 6, color: "#FF8A00", fontSize: 10, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>以固定页面为准</button>
+                      </div>
+                    )}
+                    {editFixedIdx === i && (
+                      <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                        <input value={editFixedData.name} onChange={e => setEditFixedData(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 6 }} />
+                        <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                          <input {...decimalInput} value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 8px" }} />
+                          <select value={editFixedData.category} onChange={e => setEditFixedData(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", maxWidth: "50%" }}>
+                            {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => {
+                            const cat = editFixedData.category || expCatList[0];
+                            const newAmt = parseFloat(editFixedData.amount) || 0;
+                            setFixed(p => p.map((f2, j) => j === i ? { name: editFixedData.name.trim(), amount: newAmt, category: cat, icon: expenseCats[cat]?.icon || "📌" } : f2));
+                            setFixedAmounts(p => ({ ...p, [i]: newAmt }));
+                            setEditFixedIdx(null);
+                          }} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "none", background: "#FF8A00", color: "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>保存</button>
+                          <button onClick={() => setEditFixedIdx(null)} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#666", fontSize: 12, cursor: "pointer" }}>取消</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {mismatch && (
-                    <div style={{ padding: "6px 10px", borderTop: "1px solid rgba(255,138,0,0.2)", background: "rgba(255,138,0,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ fontSize: 10, color: "#FFB347" }}>⚠️ 固定页面金额为 RM{liveAmt.toFixed(2)}，与此不同</span>
-                      <button onClick={() => setFixed(p => p.map((f2, j) => j === i ? { ...f2, amount: liveAmt } : f2))}
-                        style={{ background: "none", border: "1px solid rgba(255,138,0,0.4)", borderRadius: 6, color: "#FF8A00", fontSize: 10, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>以固定页面为准</button>
-                    </div>
-                  )}
-                  {editFixedIdx === i && (
-                    <div style={{ padding: "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                      <input value={editFixedData.name} onChange={e => setEditFixedData(p => ({ ...p, name: e.target.value }))} style={{ ...iS, width: "100%", fontSize: 12, padding: "6px 8px", marginBottom: 6 }} />
-                      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                        <input {...decimalInput} value={editFixedData.amount} onChange={e => setEditFixedData(p => ({ ...p, amount: e.target.value }))} style={{ ...iS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 8px" }} />
-                        <select value={editFixedData.category} onChange={e => setEditFixedData(p => ({ ...p, category: e.target.value }))} style={{ ...iS, flex: 1, fontSize: 12, padding: "6px 8px", maxWidth: "50%" }}>
-                          {expCatList.map(c => <option key={c} value={c}>{expenseCats[c]?.icon} {c}</option>)}
-                        </select>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => {
-                          const cat = editFixedData.category || expCatList[0];
-                          const newAmt = parseFloat(editFixedData.amount) || 0;
-                          setFixed(p => p.map((f2, j) => j === i ? { name: editFixedData.name.trim(), amount: newAmt, category: cat, icon: expenseCats[cat]?.icon || "📌" } : f2));
-                          setFixedAmounts(p => ({ ...p, [i]: newAmt }));
-                          setEditFixedIdx(null);
-                        }} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "none", background: "#FF8A00", color: "#000", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>保存</button>
-                        <button onClick={() => setEditFixedIdx(null)} style={{ flex: 1, padding: "6px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#666", fontSize: 12, cursor: "pointer" }}>取消</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ); })}
+                ); })}
             </div>
           </>)}
+        </div>
+      )}
+
+      {/* Import Confirm Modal */}
+      {importConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 24 }}>
+          <div style={{ ...cardStyle, padding: 22, width: "100%", maxWidth: 320, background: "#14151a", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>📂 导入 CSV</div>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>找到 <span style={{ color: "#FF8A00", fontWeight: 700 }}>{importConfirm.length}</span> 条记录，选择导入方式：</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={() => doImport("merge")} style={{ padding: "12px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #FF8A00, #FFa040)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                合并到现有记录
+              </button>
+              <button onClick={() => doImport("replace")} style={{ padding: "12px", borderRadius: 10, border: "1px solid #E85555", background: "rgba(232,85,85,0.1)", color: "#E85555", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                覆盖全部记录
+              </button>
+              <button onClick={() => setImportConfirm(null)} style={{ padding: "10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#555", fontSize: 13, cursor: "pointer" }}>
+                取消
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
